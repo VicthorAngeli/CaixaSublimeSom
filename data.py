@@ -407,3 +407,132 @@ def get_projecao() -> pd.DataFrame:
             "saldo_projetado": round(saldo, 2),
         })
     return pd.DataFrame(rows)
+
+
+# ──────────────────────────────────────────────
+# DIAGNÓSTICO FINANCEIRO (problemas + soluções)
+# ──────────────────────────────────────────────
+
+def get_diagnostico() -> dict:
+    """Analisa os dados e retorna problemas e soluções baseados em evidências."""
+    df = get_transacoes()
+    kpis = get_kpis()
+    resumo = get_resumo_mensal()
+    saldos_ant = get_saldos_anteriores()
+
+    if df.empty:
+        return {"problemas": [], "solucoes": [], "impacto_total_estimado": 0}
+
+    total_entradas = kpis["total_entradas"]
+    total_saidas = kpis["total_saidas"]
+    n_meses = max(len(MESES_ORDEM), 1)
+
+    problemas = []
+    solucoes = []
+
+    # ── Problema 1: Concentração de receita em eventos pontuais ──
+    ofertas = df.loc[df["descricao"].str.lower().str.contains("oferta", na=False), "entrada"].sum()
+    receita_eventos = total_entradas - ofertas
+    pct_eventos = (receita_eventos / total_entradas * 100) if total_entradas > 0 else 0
+    of_mensal = []
+    for m in MESES_ORDEM:
+        of_mes = df[(df["mes"] == m) & (df["descricao"].str.lower().str.contains("oferta", na=False))]["entrada"].sum()
+        of_mensal.append(of_mes)
+    of_min = min(of_mensal) if of_mensal else 0
+    of_max = max(of_mensal) if of_mensal else 0
+
+    if pct_eventos > 50:
+        problemas.append({
+            "titulo": "Receita concentrada em eventos pontuais",
+            "icon": "📊",
+            "gravidade": "critico",
+            "texto": f"Eventos e arrecadações = <b>R$ {receita_eventos:,.2f}</b> "
+                     f"(<b>{pct_eventos:.0f}%</b> da receita total). "
+                     f"Ofertas de ensaio (receita recorrente) variaram de "
+                     f"R$ {of_min:,.2f} a R$ {of_max:,.2f}/mês — instável e insuficiente. "
+                     f"Meses sem evento geram <b>déficit</b>.",
+            "evidencia": f"{pct_eventos:.0f}% eventos vs {100-pct_eventos:.0f}% recorrente",
+        })
+        solucoes.append({
+            "titulo": "Criar contribuição mensal fixa dos membros",
+            "icon": "💳",
+            "texto": f"Ofertas de ensaio são instáveis (R$ {of_min:,.2f}–R$ {of_max:,.2f}/mês). "
+                     f"Estabelecer cota fixa mensal (ex: R$ 20/membro). Com 15 membros = "
+                     f"<b>R$ 300/mês garantidos</b>, criando base que sustenta o caixa sem depender de eventos.",
+            "impacto": "+ R$ 300/mês",
+        })
+
+    # ── Problema 2: Empréstimos pessoais drenando o caixa ──
+    emp_df = df[df["categoria"] == "Empréstimos / Adiantamentos"]
+    emprestimo_total = emp_df["saida"].sum()
+    pct_emp = (emprestimo_total / total_saidas * 100) if total_saidas > 0 else 0
+    devolver = df[df["descricao"].str.lower().str.contains("devolver", na=False)]
+    pendente_devolver = devolver["saida"].sum()
+
+    if emprestimo_total > 0:
+        txt_devolver = ""
+        if pendente_devolver > 0:
+            txt_devolver = f" Há <b>R$ {pendente_devolver:,.2f}</b> com promessa de devolução ainda pendente."
+        problemas.append({
+            "titulo": "Empréstimos pessoais drenando o caixa",
+            "icon": "🏦",
+            "gravidade": "critico" if pct_emp > 30 else "aviso",
+            "texto": f"Saídas como empréstimos/adiantamentos = <b>R$ {emprestimo_total:,.2f}</b> "
+                     f"(<b>{pct_emp:.0f}%</b> de todas as saídas). "
+                     f"São gastos pessoais, não do grupo.{txt_devolver}",
+            "evidencia": f"R$ {emprestimo_total:,.2f} = {pct_emp:.0f}% das saídas",
+        })
+        solucoes.append({
+            "titulo": "Política rígida de empréstimos",
+            "icon": "📋",
+            "texto": f"Regra: máx R$ 200/empréstimo, devolução em 30 dias, aprovação coletiva &gt; R$ 100. "
+                     f"<b>Cobrar imediatamente os R$ {pendente_devolver:,.2f} pendentes</b>. "
+                     f"Se todos os R$ {emprestimo_total:,.2f} voltarem, saldo sobe para "
+                     f"<b>R$ {kpis['saldo_atual'] + emprestimo_total:,.2f}</b>.",
+            "impacto": f"+ R$ {emprestimo_total:,.2f}",
+        })
+
+    # ── Problema 3: Movimentações sem registro entre meses ──
+    gap_total = 0.0
+    gaps = []
+    for i in range(len(resumo) - 1):
+        sf = resumo.iloc[i]["saldo_final"]
+        prox_mes = str(resumo.iloc[i + 1]["mes"])
+        sa_prox = saldos_ant.get(prox_mes, sf)
+        gap = sf - sa_prox
+        if abs(gap) > 0.01:
+            gaps.append((str(resumo.iloc[i]["mes"]), prox_mes, gap))
+            gap_total += gap
+
+    if abs(gap_total) > 0.01:
+        detalhes = "; ".join([f"{a}→{b}: R$ {g:,.2f}" for a, b, g in gaps])
+        problemas.append({
+            "titulo": "Movimentações sem registro entre meses",
+            "icon": "👻",
+            "gravidade": "critico" if gap_total > 200 else "aviso",
+            "texto": f"<b>R$ {gap_total:,.2f}</b> saíram do caixa sem transação registrada. "
+                     f"Detalhes: {detalhes}. "
+                     f"Dinheiro saindo sem controle = impossível prestar contas.",
+            "evidencia": f"R$ {gap_total:,.2f} não rastreados",
+        })
+        solucoes.append({
+            "titulo": "Registrar 100% das movimentações",
+            "icon": "📝",
+            "texto": f"Os R$ {gap_total:,.2f} não rastreados precisam parar de existir. "
+                     f"<b>Toda saída e entrada — por menor que seja — deve entrar no sistema no mesmo dia.</b> "
+                     f"Designar um responsável único para registro. O dashboard já tem o formulário na sidebar.",
+            "impacto": f"+ R$ {gap_total:,.2f}/tri",
+        })
+
+    # ── Impacto total estimado ──
+    impacto_total = 0.0
+    if pct_eventos > 50:
+        impacto_total += 300 * 3
+    impacto_total += emprestimo_total
+    impacto_total += abs(gap_total)
+
+    return {
+        "problemas": problemas,
+        "solucoes": solucoes,
+        "impacto_total_estimado": round(impacto_total, 2),
+    }

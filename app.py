@@ -29,6 +29,7 @@ from data import (
     MESES_PT,
     atualizar_saldo_anterior_mes,
     get_saldos_anteriores,
+    get_diagnostico,
 )
 
 # ──────────────────────────────────────────────
@@ -1368,41 +1369,68 @@ with col_ent_info:
 
 
 # ══════════════════════════════════════════════
-# SEÇÃO 10 — RECOMENDAÇÕES
+# SEÇÃO 10 — DIAGNÓSTICO FINANCEIRO
 # ══════════════════════════════════════════════
 
-section_header("💼", "Recomendações Estratégicas", "Ações práticas baseadas na análise dos dados", color=VERDE)
+section_header("🔍", "Diagnóstico Financeiro", "Problemas identificados e soluções baseadas nos dados reais", color="#7C3AED")
 
-recomendacoes = [
-    ("Diversificar Fontes de Receita",
-     "Atualmente, <b>79,5%</b> da receita vem de eventos pontuais. "
-     "Criar pelo menos 2 fontes recorrentes: contribuição mensal voluntária, "
-     "venda de produtos, rifas programadas."),
-    ("Formalizar Política de Empréstimos",
-     "R$ 820 saíram como empréstimos/adiantamentos no trimestre = <b>45%</b> das saídas. "
-     "Definir política escrita: limite, prazo, aprovação dupla, registro assinado."),
-    ("Aprovação para Gastos Acima de R$ 200",
-     "Despesas elevadas (R$ 500, R$ 320, R$ 266) sem aprovação documentada. "
-     "Exigir autorização escrita de 2 líderes antes da execução."),
-    ("Evento de Arrecadação Todo Mês",
-     "Meses com evento = superávit. Sem evento (Fev) = déficit. "
-     "Criar calendário fixo: 1 evento/mês mínimo (sorteio, lava car, bazar, etc)."),
-    ("Criar Fundo de Reserva",
-     f"Saldo cobre apenas <b>{kpis['reserva_em_meses']:.1f} meses</b>. Meta: 3 meses. "
-     f"Reservar 20% de toda arrecadação de eventos até atingir {fmt_brl(meta_reserva_3m)}."),
-    ("Padronizar Classificação de Despesas",
-     "Descrições genéricas dificultam análise. "
-     "Adotar categorias fixas (Operacional, Eventos, Material, Pessoal) "
-     "e sempre registrar beneficiário + finalidade."),
-]
+diag = get_diagnostico()
 
-for i, (titulo, texto) in enumerate(recomendacoes, 1):
-    st.markdown(f"""
-    <div class="rec-card">
-        <h4><span class="rec-num">{i}</span> {titulo}</h4>
-        <p>{texto}</p>
-    </div>
-    """, unsafe_allow_html=True)
+if diag["problemas"] or diag["solucoes"]:
+    col_prob, col_sol = st.columns(2)
+
+    with col_prob:
+        st.markdown("<h4 style='color:#E02D3C; margin-bottom:0.8rem;'>🔴 Problemas Identificados</h4>", unsafe_allow_html=True)
+        for i, p in enumerate(diag["problemas"], 1):
+            grav_cor = VERMELHO if p["gravidade"] == "critico" else LARANJA
+            st.markdown(f"""
+            <div style="background:white; border-radius:14px; padding:1.2rem 1.4rem; margin-bottom:0.8rem;
+                        border-left:4px solid {grav_cor}; box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+                <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem;">
+                    <span style="font-size:1.3rem;">{p['icon']}</span>
+                    <span style="font-weight:700; color:#1e293b; font-size:0.95rem;">Problema {i}: {p['titulo']}</span>
+                </div>
+                <p style="color:#475569; font-size:0.85rem; line-height:1.65; margin:0 0 0.5rem 0;">{p['texto']}</p>
+                <div style="background:{grav_cor}11; border-radius:8px; padding:0.4rem 0.8rem;
+                            display:inline-block; font-size:0.78rem; color:{grav_cor}; font-weight:600;">
+                    📌 {p['evidencia']}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+    with col_sol:
+        st.markdown("<h4 style='color:#0D9F6E; margin-bottom:0.8rem;'>🟢 Soluções Propostas</h4>", unsafe_allow_html=True)
+        for i, s in enumerate(diag["solucoes"], 1):
+            st.markdown(f"""
+            <div style="background:white; border-radius:14px; padding:1.2rem 1.4rem; margin-bottom:0.8rem;
+                        border-left:4px solid {VERDE}; box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+                <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem;">
+                    <span style="font-size:1.3rem;">{s['icon']}</span>
+                    <span style="font-weight:700; color:#1e293b; font-size:0.95rem;">Solução {i}: {s['titulo']}</span>
+                </div>
+                <p style="color:#475569; font-size:0.85rem; line-height:1.65; margin:0 0 0.5rem 0;">{s['texto']}</p>
+                <div style="background:{VERDE}11; border-radius:8px; padding:0.4rem 0.8rem;
+                            display:inline-block; font-size:0.78rem; color:{VERDE}; font-weight:600;">
+                    💰 Impacto estimado: {s['impacto']}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+    # ── Impacto Total ──
+    if diag["impacto_total_estimado"] > 0:
+        st.markdown(f"""
+        <div style="background:linear-gradient(135deg, rgba(13,159,110,0.04), rgba(59,130,246,0.04)); border-radius:16px;
+                    padding:1.5rem; margin-top:1rem; text-align:center;
+                    border:1px solid rgba(13,159,110,0.15);">
+            <p style="color:#64748b; font-size:0.85rem; margin:0 0 0.3rem 0;">Impacto total estimado se as 3 soluções forem aplicadas</p>
+            <p style="font-size:1.8rem; font-weight:800; color:#0D9F6E; margin:0;">
+                + {fmt_brl(diag['impacto_total_estimado'])}
+                <span style="font-size:0.85rem; font-weight:400; color:#94a3b8;"> em 3 meses</span>
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+else:
+    st.success("✅ Nenhum problema crítico identificado nos dados atuais.")
 
 
 # ══════════════════════════════════════════════
