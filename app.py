@@ -21,6 +21,12 @@ from data import (
     get_top_despesas,
     get_projecao,
     MESES_ORDEM,
+    adicionar_transacao,
+    remover_transacao,
+    atualizar_saldo_inicial,
+    get_saldo_inicial,
+    restaurar_padrao,
+    MESES_PT,
 )
 
 # ──────────────────────────────────────────────
@@ -31,7 +37,7 @@ st.set_page_config(
     page_title="Caixa Sublime Som — Dashboard",
     page_icon="🎵",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
 # Paleta de cores premium
@@ -533,7 +539,15 @@ st.markdown("""
     /* ─── HIDE STREAMLIT CHROME ─── */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
-    header {visibility: hidden;}
+
+    /* ─── SIDEBAR ─── */
+    section[data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+        border-right: 1px solid rgba(0,0,0,0.06);
+    }
+    section[data-testid="stSidebar"] .stMarkdown h2 {
+        color: #1e293b;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -555,16 +569,109 @@ def section_header(icon: str, title: str, desc: str, color: str = VERDE):
 
 
 # ══════════════════════════════════════════════
+# SIDEBAR — GESTÃO DE DADOS
+# ══════════════════════════════════════════════
+
+with st.sidebar:
+    st.markdown("## 📋 Gestão de Dados")
+    st.markdown("---")
+
+    # ── Saldo Inicial ──
+    with st.expander("💰 Saldo Inicial", expanded=False):
+        _saldo_ini = get_saldo_inicial()
+        novo_saldo = st.number_input(
+            "Saldo antes da 1ª transação (R$)",
+            value=_saldo_ini, step=0.01, format="%.2f", key="saldo_ini_input",
+        )
+        if st.button("Salvar Saldo Inicial", key="btn_saldo", use_container_width=True):
+            if novo_saldo != _saldo_ini:
+                atualizar_saldo_inicial(novo_saldo)
+                st.rerun()
+
+    # ── Nova Transação ──
+    st.markdown("### ➕ Nova Transação")
+    with st.form("nova_transacao", clear_on_submit=True):
+        col_d, col_t = st.columns([2, 1])
+        with col_d:
+            data_input = st.date_input("Data")
+        with col_t:
+            tipo_input = st.selectbox("Tipo", ["Entrada", "Saída"])
+        descricao_input = st.text_input("Descrição")
+        valor_input = st.number_input("Valor (R$)", min_value=0.0, step=0.01, format="%.2f")
+        submitted = st.form_submit_button("✅ Adicionar", use_container_width=True)
+
+        if submitted:
+            if not descricao_input:
+                st.error("Preencha a descrição")
+            elif valor_input <= 0:
+                st.error("Valor deve ser maior que zero")
+            else:
+                entrada = valor_input if tipo_input == "Entrada" else 0
+                saida = valor_input if tipo_input == "Saída" else 0
+                adicionar_transacao(
+                    data_input.strftime("%Y-%m-%d"),
+                    descricao_input, entrada, saida,
+                )
+                st.rerun()
+
+    # ── Importar CSV ──
+    st.markdown("---")
+    with st.expander("📤 Importar CSV"):
+        st.caption("Colunas: `data`, `descricao`, `entrada`, `saida`")
+        uploaded = st.file_uploader("Selecionar arquivo", type=["csv"], key="csv_upload")
+        if uploaded:
+            try:
+                df_csv = pd.read_csv(uploaded)
+                df_csv.columns = df_csv.columns.str.lower().str.strip()
+                required = {"data", "descricao", "entrada", "saida"}
+                if required.issubset(set(df_csv.columns)):
+                    for _, row in df_csv.iterrows():
+                        adicionar_transacao(
+                            str(row["data"]), str(row["descricao"]),
+                            float(row.get("entrada", 0) or 0),
+                            float(row.get("saida", 0) or 0),
+                        )
+                    st.success(f"✅ {len(df_csv)} transações importadas!")
+                    st.rerun()
+                else:
+                    st.error("Colunas necessárias: data, descricao, entrada, saida")
+            except Exception as e:
+                st.error(f"Erro ao importar: {e}")
+
+    # ── Exportar / Restaurar ──
+    st.markdown("---")
+    if not df.empty:
+        df_exp = df[["data", "mes", "descricao", "entrada", "saida"]].copy()
+        df_exp["data"] = df_exp["data"].dt.strftime("%Y-%m-%d")
+        st.download_button(
+            "📥 Exportar CSV", df_exp.to_csv(index=False),
+            "caixa_sublime_som.csv", "text/csv",
+            use_container_width=True,
+        )
+
+    st.markdown("---")
+    if st.button("🔄 Restaurar Dados Padrão", use_container_width=True):
+        restaurar_padrao()
+        st.rerun()
+
+    st.caption(f"{len(df)} transações · {len(MESES_ORDEM)} meses")
+
+
+# ══════════════════════════════════════════════
 # HEADER
 # ══════════════════════════════════════════════
+
+_primeiro_mes = MESES_ORDEM[0][:3] if MESES_ORDEM else "?"
+_ultimo_mes = MESES_ORDEM[-1][:3] if MESES_ORDEM else "?"
+_n_meses = len(MESES_ORDEM)
 
 st.markdown(f"""
 <div class="hero">
     <h1>🎵 Caixa Sublime Som</h1>
     <p class="subtitle">Dashboard Financeiro Executivo</p>
     <div class="meta">
-        <span class="badge">📅 1º Trimestre 2026</span>
-        <span class="badge">📊 Jan – Mar</span>
+        <span class="badge">📅 {_n_meses} meses analisados</span>
+        <span class="badge">📊 {_primeiro_mes} – {_ultimo_mes}</span>
         <span class="badge">🕐 {datetime.now().strftime("%d/%m/%Y %H:%M")}</span>
     </div>
 </div>
@@ -575,18 +682,21 @@ st.markdown(f"""
 # SEÇÃO 1 — KPIs EXECUTIVOS
 # ══════════════════════════════════════════════
 
-section_header("📊", "Indicadores Executivos", "Visão consolidada do 1º trimestre 2026")
+section_header("📊", "Indicadores Executivos", f"Visão consolidada — {_primeiro_mes} a {_ultimo_mes}")
 
 col1, col2, col3, col4, col5 = st.columns(5)
 
 with col1:
+    _var_arrow = "▲" if kpis["variacao_saldo_ultimo"] >= 0 else "▼"
+    _var_class = "up" if kpis["variacao_saldo_ultimo"] >= 0 else "down"
+    _var_ref = MESES_ORDEM[-2][:3].lower() if len(MESES_ORDEM) >= 2 else "ant"
     st.markdown(f"""
     <div class="kpi-glass">
         <div class="accent-bar" style="background: linear-gradient(90deg, {VERDE}, #059669);"></div>
         <div class="kpi-icon" style="background:{VERDE_BG};">💰</div>
         <div class="kpi-label">Saldo em Caixa</div>
         <div class="kpi-val green">{fmt_brl(kpis["saldo_atual"])}</div>
-        <div class="kpi-sub up">▲ {fmt_pct(kpis["variacao_saldo_ultimo"])} vs fev</div>
+        <div class="kpi-sub {_var_class}">{_var_arrow} {fmt_pct(abs(kpis["variacao_saldo_ultimo"]))} vs {_var_ref}</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -748,8 +858,8 @@ with tab1:
 
 with tab2:
     saldos_data = pd.DataFrame({
-        "mes": ["Início", "Janeiro", "Fevereiro", "Março"],
-        "saldo": [77.34, 1330.51, 595.61, 786.45],
+        "mes": ["Início"] + list(resumo["mes_label"]),
+        "saldo": [get_saldo_inicial()] + list(resumo["saldo_final"]),
     })
     fig_saldo = go.Figure()
     fig_saldo.add_trace(go.Scatter(
@@ -981,14 +1091,14 @@ st.markdown(
 # SEÇÃO 5 — RESUMO MENSAL
 # ══════════════════════════════════════════════
 
-section_header("📅", "Resumo Mensal", "Comparativo lado a lado dos três meses", color=LARANJA)
+section_header("📅", "Resumo Mensal", "Comparativo lado a lado dos meses analisados", color=LARANJA)
 
-col_jan, col_fev, col_mar = st.columns(3)
-month_colors = {"Janeiro": VERDE, "Fevereiro": VERMELHO, "Março": AZUL}
+_month_colors = [VERDE, VERMELHO, AZUL, LARANJA, "#8B5CF6", "#EC4899", "#06B6D4", "#84CC16"]
+_month_cols = st.columns(len(MESES_ORDEM)) if MESES_ORDEM else []
 
-for col, mes in zip([col_jan, col_fev, col_mar], MESES_ORDEM):
+for _mi, (col, mes) in enumerate(zip(_month_cols, MESES_ORDEM)):
     r = resumo[resumo["mes"] == mes].iloc[0]
-    mc = month_colors[mes]
+    mc = _month_colors[_mi % len(_month_colors)]
     cor_res = VERDE if r["resultado_mensal"] >= 0 else VERMELHO
     emoji_r = "✅" if r["resultado_mensal"] >= 0 else "⚠️"
 
@@ -1019,28 +1129,35 @@ for col, mes in zip([col_jan, col_fev, col_mar], MESES_ORDEM):
 
 section_header("🚨", "Alertas e Pontos de Atenção", "Itens que exigem acompanhamento ou decisão da liderança", color=VERMELHO)
 
-alertas = [
-    {"tipo": "critico", "icon": "🔴",
-     "titulo": "Empréstimo Pendente — A Receber",
-     "texto": f"David recebeu <b>{fmt_brl(320.00)}</b> em 06/03 para simpósio, com previsão de devolução. "
-              f"Este valor <b>não retornou ao caixa</b>. Formalizar prazo e acompanhar semanalmente."},
-    {"tipo": "critico", "icon": "🔴",
+alertas = []
+
+if kpis["emprestimo_pendente"] > 0:
+    alertas.append({"tipo": "critico", "icon": "🔴",
+     "titulo": "Empréstimos / Adiantamentos Pendentes",
+     "texto": f"Saídas classificadas como empréstimos somam <b>{fmt_brl(kpis['emprestimo_pendente'])}</b>. "
+              f"Verificar devoluções pendentes e formalizar prazos."})
+
+if kpis["concentracao_receita"] > 40:
+    alertas.append({"tipo": "critico", "icon": "🔴",
      "titulo": "Alta Concentração de Receita em Eventos",
-     "texto": f"Sorteios e arrecadações eventuais somam <b>{fmt_brl(1410 + 480 + 450)}</b> = "
-              f"<b>{fmt_pct((1410 + 480 + 450) / kpis['total_entradas'] * 100)}</b> de toda a receita. "
-              f"Receita recorrente (Ofertas) = apenas <b>{fmt_pct(kpis['pct_recorrente'])}</b>."},
-    {"tipo": "aviso", "icon": "🟡",
-     "titulo": "Fevereiro — Déficit Operacional",
-     "texto": f"Saídas (<b>{fmt_brl(550)}</b>) superaram entradas (<b>{fmt_brl(155)}</b>) em <b>{fmt_brl(395)}</b>. "
-              f"Queda de <b>39,9%</b> no saldo. Principal causa: 'Joum David' (R$ 500)."},
-    {"tipo": "aviso", "icon": "🟡",
-     "titulo": "Gasto Atípico — 'Joum David' (R$ 500,00)",
-     "texto": "Maior saída individual do trimestre. Documentar natureza para prestação de contas transparente."},
-    {"tipo": "positivo", "icon": "🟢",
-     "titulo": f"Resultado Trimestral Positivo — Superávit de {fmt_brl(kpis['resultado_liquido'])}",
-     "texto": f"Mesmo com o déficit de fevereiro, o trimestre encerra com superávit e cobertura de "
-              f"<b>{kpis['indice_cobertura_tri']:.2f}x</b>. Eventos de Jan e Mar compensaram."},
-]
+     "texto": f"A maior entrada individual = <b>{fmt_pct(kpis['concentracao_receita'])}</b> de toda a receita. "
+              f"Receita recorrente (Ofertas) = apenas <b>{fmt_pct(kpis['pct_recorrente'])}</b>."})
+
+for _, _rm in resumo.iterrows():
+    if _rm["resultado_mensal"] < 0:
+        alertas.append({"tipo": "aviso", "icon": "🟡",
+         "titulo": f"{_rm['mes_label']} — Déficit Operacional",
+         "texto": f"Saídas (<b>{fmt_brl(_rm['total_saidas'])}</b>) superaram entradas "
+                  f"(<b>{fmt_brl(_rm['total_entradas'])}</b>) em <b>{fmt_brl(abs(_rm['resultado_mensal']))}</b>."})
+
+if kpis["resultado_liquido"] >= 0:
+    alertas.append({"tipo": "positivo", "icon": "🟢",
+     "titulo": f"Resultado Positivo — Superávit de {fmt_brl(kpis['resultado_liquido'])}",
+     "texto": f"O período encerra com superávit e cobertura de <b>{kpis['indice_cobertura_tri']:.2f}x</b>."})
+else:
+    alertas.append({"tipo": "critico", "icon": "🔴",
+     "titulo": f"Resultado Negativo — Déficit de {fmt_brl(abs(kpis['resultado_liquido']))}",
+     "texto": f"O período encerra com déficit. Índice de cobertura: <b>{kpis['indice_cobertura_tri']:.2f}x</b>."})
 
 for a in alertas:
     st.markdown(f"""
@@ -1058,7 +1175,7 @@ for a in alertas:
 # SEÇÃO 7 — PROJEÇÃO
 # ══════════════════════════════════════════════
 
-section_header("🔮", "Projeção de Caixa", "Estimativa para o próximo trimestre (cenário conservador)", color="#8B5CF6")
+section_header("🔮", "Projeção de Caixa", "Estimativa para os próximos meses (cenário conservador)", color="#8B5CF6")
 
 st.markdown(
     "<p style='color:#94a3b8; font-size:0.85rem; margin-bottom:1rem;'>"
@@ -1087,9 +1204,9 @@ with col_proj:
 
 with col_graf_proj:
     hist_s = pd.DataFrame({
-        "mes": ["Janeiro", "Fevereiro", "Março"],
-        "saldo": [1330.51, 595.61, 786.45],
-        "tipo": ["Realizado"] * 3,
+        "mes": list(resumo["mes_label"]),
+        "saldo": list(resumo["saldo_final"]),
+        "tipo": ["Realizado"] * len(resumo),
     })
     proj_s = pd.DataFrame({
         "mes": projecao["mes"],
@@ -1166,13 +1283,17 @@ with col_m2:
     """, unsafe_allow_html=True)
 
 with col_m3:
+    _max_saida_row = resumo.loc[resumo["total_saidas"].idxmax()] if not resumo.empty else None
+    _min_saida_row = resumo.loc[resumo["total_saidas"].idxmin()] if not resumo.empty else None
+    _max_saida_label = f"{_max_saida_row['mes_label'][:3]} — {fmt_brl(_max_saida_row['total_saidas'])}" if _max_saida_row is not None else "—"
+    _min_saida_label = f"{_min_saida_row['mes_label'][:3]} — {fmt_brl(_min_saida_row['total_saidas'])}" if _min_saida_row is not None else "—"
     st.markdown(f"""
     <div class="meta-card">
         <div class="meta-icon">📉</div>
         <h4>Teto de Saídas</h4>
         <div class="meta-row"><span>Teto sugerido</span><b>{fmt_brl(kpis["media_saidas_mensal"])}</b></div>
-        <div class="meta-row"><span>Maior mês</span><b style="color:{VERMELHO}">Mar — {fmt_brl(954.66)}</b></div>
-        <div class="meta-row"><span>Menor mês</span><b style="color:{VERDE}">Jan — {fmt_brl(307.15)}</b></div>
+        <div class="meta-row"><span>Maior mês</span><b style="color:{VERMELHO}">{_max_saida_label}</b></div>
+        <div class="meta-row"><span>Menor mês</span><b style="color:{VERDE}">{_min_saida_label}</b></div>
         <div class="meta-bar-bg"><div class="meta-bar-fill" style="width:65%; background:linear-gradient(90deg, {LARANJA}, {LARANJA}88);"></div></div>
         <p style="font-size:0.78rem; color:#94a3b8; margin-top:0.6rem;">Gastos &gt; R$ 200 com aprovação</p>
     </div>
@@ -1277,7 +1398,7 @@ st.markdown(f"""
 <div class="footer">
     <span class="footer-brand">🎵 Caixa Sublime Som</span><br>
     Dashboard Financeiro Executivo<br>
-    Relatório gerado em {datetime.now().strftime("%d/%m/%Y às %H:%M")} · Período: Janeiro – Março 2026<br>
+    Relatório gerado em {datetime.now().strftime("%d/%m/%Y às %H:%M")} · Período: {_primeiro_mes} – {_ultimo_mes}<br>
     Dados extraídos dos relatórios de caixa mensais<br><br>
     <em>Uso interno — Prestação de contas à liderança do grupo Sublime Som</em>
 </div>

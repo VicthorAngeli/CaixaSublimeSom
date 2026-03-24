@@ -1,3 +1,5 @@
 __pycache__/
 *.pyc
 .env
+dados.json
+CaixaSublimeSom_Relatorio.xlsx
