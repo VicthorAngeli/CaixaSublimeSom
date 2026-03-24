@@ -27,6 +27,8 @@ from data import (
     get_saldo_inicial,
     restaurar_padrao,
     MESES_PT,
+    atualizar_saldo_anterior_mes,
+    get_saldos_anteriores,
 )
 
 # ──────────────────────────────────────────────
@@ -586,6 +588,20 @@ with st.sidebar:
         if st.button("Salvar Saldo Inicial", key="btn_saldo", use_container_width=True):
             if novo_saldo != _saldo_ini:
                 atualizar_saldo_inicial(novo_saldo)
+                st.rerun()
+
+    # ── Saldo Anterior por Mês ──
+    with st.expander("📊 Saldo Anterior por Mês", expanded=False):
+        st.caption("Saldo anterior real de cada mês (conforme relatório)")
+        _saldos_ant = get_saldos_anteriores()
+        for _m in MESES_ORDEM:
+            _val = _saldos_ant.get(_m, 0.0)
+            _novo = st.number_input(
+                f"{_m}", value=_val, step=0.01, format="%.2f",
+                key=f"sa_{_m}",
+            )
+            if _novo != _val:
+                atualizar_saldo_anterior_mes(_m, _novo)
                 st.rerun()
 
     # ── Nova Transação ──

@@ -20,10 +20,19 @@ MESES_PT = {
 ORDEM_MESES_ANO = list(MESES_PT.values())
 
 # ──────────────────────────────────────────────
-# DADOS PADRÃO (seed)
+# DADOS PADRÃO (seed) — 100% fiéis aos relatórios
 # ──────────────────────────────────────────────
 
 _SALDO_INICIAL_PADRAO = 77.34
+
+# Saldos anteriores reais de cada mês (conforme relatórios originais).
+# Entre os meses há movimentações não registradas nas transações,
+# por isso os saldos NÃO podem ser simplesmente calculados.
+_SALDOS_ANTERIORES_PADRAO = {
+    "Janeiro": 77.34,
+    "Fevereiro": 990.61,
+    "Março": 510.77,
+}
 
 _TRANSACOES_PADRAO = [
     {"data": "2026-01-04", "mes": "Janeiro",   "descricao": "Oferta Ensaio",                        "entrada": 55.00,    "saida": 0},
@@ -58,20 +67,30 @@ def _load_data():
     if DATA_FILE.exists():
         with open(DATA_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
-        return data.get("saldo_inicial", _SALDO_INICIAL_PADRAO), data.get("transacoes", [])
-    return _SALDO_INICIAL_PADRAO, list(_TRANSACOES_PADRAO)
+        return (
+            data.get("saldo_inicial", _SALDO_INICIAL_PADRAO),
+            data.get("transacoes", []),
+            data.get("saldos_anteriores", dict(_SALDOS_ANTERIORES_PADRAO)),
+        )
+    return _SALDO_INICIAL_PADRAO, list(_TRANSACOES_PADRAO), dict(_SALDOS_ANTERIORES_PADRAO)
 
 
-def _save_data(saldo_inicial, transacoes):
+def _save_data(saldo_inicial, transacoes, saldos_anteriores=None):
+    if saldos_anteriores is None:
+        _, _, saldos_anteriores = _load_data()
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(
-            {"saldo_inicial": round(saldo_inicial, 2), "transacoes": transacoes},
+            {
+                "saldo_inicial": round(saldo_inicial, 2),
+                "transacoes": transacoes,
+                "saldos_anteriores": saldos_anteriores,
+            },
             f, ensure_ascii=False, indent=2,
         )
 
 
 def adicionar_transacao(data_str, descricao, entrada, saida):
-    saldo_ini, trans = _load_data()
+    saldo_ini, trans, saldos_ant = _load_data()
     dt = datetime.strptime(data_str, "%Y-%m-%d")
     mes = MESES_PT[dt.month]
     trans.append({
@@ -82,24 +101,36 @@ def adicionar_transacao(data_str, descricao, entrada, saida):
         "saida": round(float(saida), 2),
     })
     trans.sort(key=lambda t: t["data"])
-    _save_data(saldo_ini, trans)
+    _save_data(saldo_ini, trans, saldos_ant)
 
 
 def remover_transacao(idx):
-    saldo_ini, trans = _load_data()
+    saldo_ini, trans, saldos_ant = _load_data()
     if 0 <= idx < len(trans):
         trans.pop(idx)
-        _save_data(saldo_ini, trans)
+        _save_data(saldo_ini, trans, saldos_ant)
 
 
 def atualizar_saldo_inicial(novo_saldo):
-    _, trans = _load_data()
-    _save_data(float(novo_saldo), trans)
+    _, trans, saldos_ant = _load_data()
+    _save_data(float(novo_saldo), trans, saldos_ant)
 
 
 def get_saldo_inicial():
-    s, _ = _load_data()
+    s, _, _ = _load_data()
     return s
+
+
+def atualizar_saldo_anterior_mes(mes, valor):
+    """Define o saldo anterior real de um mês específico."""
+    saldo_ini, trans, saldos_ant = _load_data()
+    saldos_ant[mes] = round(float(valor), 2)
+    _save_data(saldo_ini, trans, saldos_ant)
+
+
+def get_saldos_anteriores():
+    _, _, sa = _load_data()
+    return sa
 
 
 def restaurar_padrao():
@@ -148,7 +179,7 @@ MESES_ORDEM = []
 
 
 def get_transacoes() -> pd.DataFrame:
-    _, transacoes_raw = _load_data()
+    _, transacoes_raw, _ = _load_data()
 
     if not transacoes_raw:
         MESES_ORDEM.clear()
@@ -185,6 +216,7 @@ def get_resumo_mensal() -> pd.DataFrame:
         return pd.DataFrame()
 
     saldo_ini = get_saldo_inicial()
+    saldos_anteriores = get_saldos_anteriores()
 
     resumo = df.groupby("mes", observed=False).agg(
         total_entradas=("entrada", "sum"),
@@ -192,16 +224,22 @@ def get_resumo_mensal() -> pd.DataFrame:
         qtd_transacoes=("descricao", "count"),
     ).reset_index()
 
-    saldo = saldo_ini
-    saldos_ant = []
-    saldos_fin = []
+    saldo_calculado = saldo_ini
+    saldos_ant_list = []
+    saldos_fin_list = []
     for _, row in resumo.iterrows():
-        saldos_ant.append(round(saldo, 2))
-        saldo = saldo + row["total_entradas"] - row["total_saidas"]
-        saldos_fin.append(round(saldo, 2))
+        mes_nome = str(row["mes"])
+        if mes_nome in saldos_anteriores:
+            sa = saldos_anteriores[mes_nome]
+        else:
+            sa = round(saldo_calculado, 2)
+        saldos_ant_list.append(sa)
+        sf = round(sa + row["total_entradas"] - row["total_saidas"], 2)
+        saldos_fin_list.append(sf)
+        saldo_calculado = sf
 
-    resumo["saldo_anterior"] = saldos_ant
-    resumo["saldo_final"] = saldos_fin
+    resumo["saldo_anterior"] = saldos_ant_list
+    resumo["saldo_final"] = saldos_fin_list
     resumo["resultado_mensal"] = resumo["total_entradas"] - resumo["total_saidas"]
     resumo["indice_cobertura"] = resumo.apply(
         lambda r: r["total_entradas"] / r["total_saidas"] if r["total_saidas"] > 0 else float("inf"),
