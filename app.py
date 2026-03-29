@@ -813,6 +813,115 @@ with col9:
     </div>
     """, unsafe_allow_html=True)
 
+# ── % Breakdown (linha de percentuais) ──
+_pct_entradas_eventos = ((kpis["total_entradas"] - kpis["ofertas_ensaio_total"]) / kpis["total_entradas"] * 100) if kpis["total_entradas"] > 0 else 0
+_pct_ofertas = kpis["pct_recorrente"]
+_pct_emprestimos = (kpis["emprestimo_pendente"] / kpis["total_saidas"] * 100) if kpis["total_saidas"] > 0 else 0
+_pct_operacional = 100 - _pct_emprestimos
+
+st.markdown("<div style='height:0.8rem'></div>", unsafe_allow_html=True)
+col_p1, col_p2, col_p3, col_p4 = st.columns(4)
+
+with col_p1:
+    st.markdown(f"""
+    <div style="background:white; border-radius:12px; padding:1rem 1.2rem; box-shadow:0 1px 3px rgba(0,0,0,0.04); border:1px solid rgba(0,0,0,0.04); text-align:center;">
+        <div style="font-size:0.78rem; color:#94a3b8; margin-bottom:0.3rem;">Receita de Eventos</div>
+        <div style="font-size:1.5rem; font-weight:800; color:{LARANJA};">{_pct_entradas_eventos:.0f}%</div>
+        <div style="font-size:0.75rem; color:#cbd5e1;">do total arrecadado</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+with col_p2:
+    _cor_of = VERDE if _pct_ofertas >= 40 else (LARANJA if _pct_ofertas >= 20 else VERMELHO)
+    st.markdown(f"""
+    <div style="background:white; border-radius:12px; padding:1rem 1.2rem; box-shadow:0 1px 3px rgba(0,0,0,0.04); border:1px solid rgba(0,0,0,0.04); text-align:center;">
+        <div style="font-size:0.78rem; color:#94a3b8; margin-bottom:0.3rem;">Receita Recorrente (Ofertas)</div>
+        <div style="font-size:1.5rem; font-weight:800; color:{_cor_of};">{_pct_ofertas:.0f}%</div>
+        <div style="font-size:0.75rem; color:#cbd5e1;">ideal &gt; 50%</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+with col_p3:
+    _cor_emp = VERMELHO if _pct_emprestimos > 30 else (LARANJA if _pct_emprestimos > 15 else VERDE)
+    st.markdown(f"""
+    <div style="background:white; border-radius:12px; padding:1rem 1.2rem; box-shadow:0 1px 3px rgba(0,0,0,0.04); border:1px solid rgba(0,0,0,0.04); text-align:center;">
+        <div style="font-size:0.78rem; color:#94a3b8; margin-bottom:0.3rem;">Saídas em Empréstimos</div>
+        <div style="font-size:1.5rem; font-weight:800; color:{_cor_emp};">{_pct_emprestimos:.0f}%</div>
+        <div style="font-size:0.75rem; color:#cbd5e1;">ideal &lt; 10%</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+with col_p4:
+    _conc = kpis["concentracao_receita"]
+    _cor_conc = VERMELHO if _conc > 40 else (LARANJA if _conc > 25 else VERDE)
+    st.markdown(f"""
+    <div style="background:white; border-radius:12px; padding:1rem 1.2rem; box-shadow:0 1px 3px rgba(0,0,0,0.04); border:1px solid rgba(0,0,0,0.04); text-align:center;">
+        <div style="font-size:0.78rem; color:#94a3b8; margin-bottom:0.3rem;">Concentração (Maior Entrada)</div>
+        <div style="font-size:1.5rem; font-weight:800; color:{_cor_conc};">{_conc:.0f}%</div>
+        <div style="font-size:0.75rem; color:#cbd5e1;">ideal &lt; 30%</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+# ══════════════════════════════════════════════
+# METAS FINANCEIRAS (logo após KPIs)
+# ══════════════════════════════════════════════
+
+section_header("🎯", "Metas Financeiras", "Objetivos sugeridos para os próximos meses", color=LARANJA)
+
+meta_reserva_3m = kpis["media_saidas_mensal"] * 3
+meta_receita_recorrente = kpis["media_saidas_mensal"] * 0.6
+
+col_m1, col_m2, col_m3 = st.columns(3)
+
+with col_m1:
+    pct = min(100, (kpis["saldo_atual"] / meta_reserva_3m) * 100) if meta_reserva_3m > 0 else 0
+    bar_cor = VERDE if pct >= 80 else LARANJA if pct >= 50 else VERMELHO
+    st.markdown(f"""
+    <div class="meta-card">
+        <div class="meta-icon">🏦</div>
+        <h4>Reserva de Segurança</h4>
+        <div class="meta-row"><span>Meta</span><b>{fmt_brl(meta_reserva_3m)}</b></div>
+        <div class="meta-row"><span>Atual</span><b>{fmt_brl(kpis["saldo_atual"])}</b></div>
+        <div class="meta-row"><span>Atingimento</span><b style="color:{bar_cor}">{fmt_pct(pct)}</b></div>
+        <div class="meta-bar-bg"><div class="meta-bar-fill" style="width:{pct}%; background:linear-gradient(90deg, {bar_cor}, {bar_cor}88);"></div></div>
+        <p style="font-size:0.78rem; color:#94a3b8; margin-top:0.6rem;">3× média de saídas mensais</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+with col_m2:
+    _n_m = max(len(MESES_ORDEM), 1)
+    pct_r = min(100, (kpis["ofertas_ensaio_total"] / _n_m / meta_receita_recorrente) * 100) if meta_receita_recorrente > 0 else 0
+    bar_cor_r = VERDE if pct_r >= 80 else LARANJA if pct_r >= 50 else VERMELHO
+    st.markdown(f"""
+    <div class="meta-card">
+        <div class="meta-icon">🔄</div>
+        <h4>Receita Recorrente</h4>
+        <div class="meta-row"><span>Meta/mês</span><b>{fmt_brl(meta_receita_recorrente)}</b></div>
+        <div class="meta-row"><span>Atual (média)</span><b>{fmt_brl(kpis["ofertas_ensaio_total"] / _n_m)}</b></div>
+        <div class="meta-row"><span>Atingimento</span><b style="color:{bar_cor_r}">{fmt_pct(pct_r)}</b></div>
+        <div class="meta-bar-bg"><div class="meta-bar-fill" style="width:{pct_r}%; background:linear-gradient(90deg, {bar_cor_r}, {bar_cor_r}88);"></div></div>
+        <p style="font-size:0.78rem; color:#94a3b8; margin-top:0.6rem;">60% das saídas médias</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+with col_m3:
+    _max_saida_row = resumo.loc[resumo["total_saidas"].idxmax()] if not resumo.empty else None
+    _min_saida_row = resumo.loc[resumo["total_saidas"].idxmin()] if not resumo.empty else None
+    _max_saida_label = f"{_max_saida_row['mes_label'][:3]} — {fmt_brl(_max_saida_row['total_saidas'])}" if _max_saida_row is not None else "—"
+    _min_saida_label = f"{_min_saida_row['mes_label'][:3]} — {fmt_brl(_min_saida_row['total_saidas'])}" if _min_saida_row is not None else "—"
+    st.markdown(f"""
+    <div class="meta-card">
+        <div class="meta-icon">📉</div>
+        <h4>Teto de Saídas</h4>
+        <div class="meta-row"><span>Teto sugerido</span><b>{fmt_brl(kpis["media_saidas_mensal"])}</b></div>
+        <div class="meta-row"><span>Maior mês</span><b style="color:{VERMELHO}">{_max_saida_label}</b></div>
+        <div class="meta-row"><span>Menor mês</span><b style="color:{VERDE}">{_min_saida_label}</b></div>
+        <div class="meta-bar-bg"><div class="meta-bar-fill" style="width:65%; background:linear-gradient(90deg, {LARANJA}, {LARANJA}88);"></div></div>
+        <p style="font-size:0.78rem; color:#94a3b8; margin-top:0.6rem;">Gastos &gt; R$ 200 com aprovação</p>
+    </div>
+    """, unsafe_allow_html=True)
+
 
 # ══════════════════════════════════════════════
 # SEÇÃO 2 — GRÁFICOS PRINCIPAIS
@@ -1259,66 +1368,7 @@ with col_graf_proj:
 
 
 # ══════════════════════════════════════════════
-# SEÇÃO 8 — METAS
-# ══════════════════════════════════════════════
-
-section_header("🎯", "Metas Financeiras", "Objetivos sugeridos para os próximos meses", color=LARANJA)
-
-meta_reserva_3m = kpis["media_saidas_mensal"] * 3
-meta_receita_recorrente = kpis["media_saidas_mensal"] * 0.6
-
-col_m1, col_m2, col_m3 = st.columns(3)
-
-with col_m1:
-    pct = min(100, (kpis["saldo_atual"] / meta_reserva_3m) * 100)
-    bar_cor = VERDE if pct >= 80 else LARANJA if pct >= 50 else VERMELHO
-    st.markdown(f"""
-    <div class="meta-card">
-        <div class="meta-icon">🏦</div>
-        <h4>Reserva de Segurança</h4>
-        <div class="meta-row"><span>Meta</span><b>{fmt_brl(meta_reserva_3m)}</b></div>
-        <div class="meta-row"><span>Atual</span><b>{fmt_brl(kpis["saldo_atual"])}</b></div>
-        <div class="meta-row"><span>Atingimento</span><b style="color:{bar_cor}">{fmt_pct(pct)}</b></div>
-        <div class="meta-bar-bg"><div class="meta-bar-fill" style="width:{pct}%; background:linear-gradient(90deg, {bar_cor}, {bar_cor}88);"></div></div>
-        <p style="font-size:0.78rem; color:#94a3b8; margin-top:0.6rem;">3× média de saídas mensais</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-with col_m2:
-    pct_r = min(100, (kpis["ofertas_ensaio_total"] / 3 / meta_receita_recorrente) * 100)
-    bar_cor_r = VERDE if pct_r >= 80 else LARANJA if pct_r >= 50 else VERMELHO
-    st.markdown(f"""
-    <div class="meta-card">
-        <div class="meta-icon">🔄</div>
-        <h4>Receita Recorrente</h4>
-        <div class="meta-row"><span>Meta/mês</span><b>{fmt_brl(meta_receita_recorrente)}</b></div>
-        <div class="meta-row"><span>Atual (média)</span><b>{fmt_brl(kpis["ofertas_ensaio_total"] / 3)}</b></div>
-        <div class="meta-row"><span>Atingimento</span><b style="color:{bar_cor_r}">{fmt_pct(pct_r)}</b></div>
-        <div class="meta-bar-bg"><div class="meta-bar-fill" style="width:{pct_r}%; background:linear-gradient(90deg, {bar_cor_r}, {bar_cor_r}88);"></div></div>
-        <p style="font-size:0.78rem; color:#94a3b8; margin-top:0.6rem;">60% das saídas médias</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-with col_m3:
-    _max_saida_row = resumo.loc[resumo["total_saidas"].idxmax()] if not resumo.empty else None
-    _min_saida_row = resumo.loc[resumo["total_saidas"].idxmin()] if not resumo.empty else None
-    _max_saida_label = f"{_max_saida_row['mes_label'][:3]} — {fmt_brl(_max_saida_row['total_saidas'])}" if _max_saida_row is not None else "—"
-    _min_saida_label = f"{_min_saida_row['mes_label'][:3]} — {fmt_brl(_min_saida_row['total_saidas'])}" if _min_saida_row is not None else "—"
-    st.markdown(f"""
-    <div class="meta-card">
-        <div class="meta-icon">📉</div>
-        <h4>Teto de Saídas</h4>
-        <div class="meta-row"><span>Teto sugerido</span><b>{fmt_brl(kpis["media_saidas_mensal"])}</b></div>
-        <div class="meta-row"><span>Maior mês</span><b style="color:{VERMELHO}">{_max_saida_label}</b></div>
-        <div class="meta-row"><span>Menor mês</span><b style="color:{VERDE}">{_min_saida_label}</b></div>
-        <div class="meta-bar-bg"><div class="meta-bar-fill" style="width:65%; background:linear-gradient(90deg, {LARANJA}, {LARANJA}88);"></div></div>
-        <p style="font-size:0.78rem; color:#94a3b8; margin-top:0.6rem;">Gastos &gt; R$ 200 com aprovação</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-
-# ══════════════════════════════════════════════
-# SEÇÃO 9 — COMPOSIÇÃO DE RECEITAS
+# SEÇÃO 8 — COMPOSIÇÃO DE RECEITAS
 # ══════════════════════════════════════════════
 
 section_header("💰", "Composição das Receitas", "De onde vem o dinheiro — análise de sustentabilidade", color="#3B82F6")
@@ -1369,7 +1419,7 @@ with col_ent_info:
 
 
 # ══════════════════════════════════════════════
-# SEÇÃO 10 — DIAGNÓSTICO FINANCEIRO
+# SEÇÃO 9 — DIAGNÓSTICO FINANCEIRO
 # ══════════════════════════════════════════════
 
 section_header("🔍", "Diagnóstico Financeiro", "Problemas identificados e soluções baseadas nos dados reais", color="#7C3AED")
